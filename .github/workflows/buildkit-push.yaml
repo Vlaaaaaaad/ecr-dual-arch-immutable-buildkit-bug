@@ -19,15 +19,8 @@ jobs:
           echo "::set-env name=REPO::$( basename $GITHUB_REPOSITORY | awk '{print tolower($0)}' )"
           echo "::set-env name=URL::https://github.com/$( dirname $GITHUB_REPOSITORY | awk '{print tolower($0)}' )/$( basename $GITHUB_REPOSITORY | awk '{print tolower($0)}' )"
 
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.9
-
-      - name: Dynamically replace version in the Python code
-        run: |
-          pip install poetry poetry-dynamic-versioning
-          poetry-dynamic-versioning
+      - name: Make the build unique-ish
+        run: sed -i 's/dev/buildkit/g' src/app.py
 
       - name: Login to ECR
         uses: docker/login-action@v1
@@ -54,4 +47,4 @@ jobs:
           no-cache: true # Waiting for https://github.com/docker/buildx/pull/535
           push: true
           tags: |
-            ${{ secrets.AWS_ECR_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_ECR_REGION }}.amazonaws.com/bug-report:${{ github.sha }}
+            ${{ secrets.AWS_ECR_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_ECR_REGION }}.amazonaws.com/bug-report:buildkit-${{ github.sha }}
