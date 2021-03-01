@@ -1,0 +1,75 @@
+name: Containerd
+
+on: [push]
+
+jobs:
+  Build:
+    name: Build and push with containerd
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set env vars
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+        run: |
+          echo "::set-env name=USER::$( dirname $GITHUB_REPOSITORY | awk '{print tolower($0)}' )"
+          echo "::set-env name=REPO::$( basename $GITHUB_REPOSITORY | awk '{print tolower($0)}' )"
+          echo "::set-env name=URL::https://github.com/$( dirname $GITHUB_REPOSITORY | awk '{print tolower($0)}' )/$( basename $GITHUB_REPOSITORY | awk '{print tolower($0)}' )"
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: Dynamically replace version in the Python code
+        run: |
+          pip install poetry poetry-dynamic-versioning
+          poetry-dynamic-versioning
+
+      - name: Login to ECR
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ secrets.AWS_ECR_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_ECR_REGION }}.amazonaws.com
+          username: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          buildkitd-flags: --debug
+          driver-opts: image=moby/buildkit:master
+
+      - name: Set up containerd
+        uses: crazy-max/ghaction-setup-containerd@v1
+
+      - name: Build and output to file
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64, linux/arm64
+          no-cache: true # Waiting for https://github.com/docker/buildx/pull/535
+          push: false
+          outputs: type=oci,dest=/tmp/image.tar
+          tags: |
+            ${{ secrets.AWS_ECR_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_ECR_REGION }}.amazonaws.com/bug-report:${{ github.sha }}
+
+      - name: Import image in containerd
+        run: |
+          sudo ctr i import --base-name ${{ secrets.AWS_ECR_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_ECR_REGION }}.amazonaws.com/bug-report --digests --all-platforms /tmp/image.tar
+
+      - name: Push image with containerd
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_ECR_REGION }}
+        run: |
+          aws ecr get-login-password
+
+          sudo ctr i push --user "AWS:$(aws ecr get-login-password)" ${{ secrets.AWS_ECR_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_ECR_REGION }}.amazonaws.com/bug-report:${{ github.sha }}
