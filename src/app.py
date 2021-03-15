@@ -55,7 +55,7 @@ def create_app():
     @app.after_request
     def after_request_func(response):
         response.headers['X-Reply-Service']='greeter-service'
-        response.headers['X-Version']='15679999999'
+        response.headers['X-Version']='15679299999'
         return response
 
     return app
