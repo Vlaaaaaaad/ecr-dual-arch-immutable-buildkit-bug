@@ -38,6 +38,10 @@ jobs:
           buildkitd-flags: --debug
           driver-opts: image=moby/buildkit:master
 
+      - name: USe code from proposed PR
+        run:
+          docker buildx build -t moby/buildkit:pr2020 --load "git://github.com/moby/buildkit#pull/2020/head" && docker buildx create --driver-opt image=moby/buildkit:pr2020 --use
+
       - name: Build and output to file
         uses: docker/build-push-action@v2
         with:
